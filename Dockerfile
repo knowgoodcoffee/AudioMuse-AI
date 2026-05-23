@@ -157,6 +157,40 @@ WORKDIR /app
 # Copy requirements files
 COPY requirements/ /app/requirements/
 
+# ============================================================================
+# CPU CONSISTENCY SETTING FOR BUILD
+# ============================================================================
+# These environment variables ensure CONSISTENT behavior across different
+# AVX2-capable CPUs (e.g., Intel 6th gen vs 12th gen have different FPU defaults).
+# They do NOT enable non-AVX support - AVX2 is still required for x86_64 builds.
+# ARM64 builds use NEON instructions and work on all ARM64 CPUs.
+
+# oneDNN floating-point math mode: STRICT reduces non-deterministic FP optimizations
+# Keeps CPU behavior deterministic across different CPU generations
+ENV ONEDNN_DEFAULT_FPMATH_MODE=STRICT
+
+# ONNX Runtime optimization settings to prevent signal 9 crashes on newer CPUs
+# (Intel 12600K and similar have different optimization behavior than older CPUs)
+# Similar to TF_ENABLE_ONEDNN_OPTS=0 for TensorFlow compatibility
+ENV ORT_DISABLE_ALL_OPTIMIZATIONS=1 \
+    ORT_ENABLE_CPU_FP16_OPS=0
+
+# Force consistent memory allocation and precision behavior
+# Prevents different memory allocation patterns and floating-point precision issues
+# between Intel generations (e.g., 12600K vs i5-6500)
+ENV ORT_DISABLE_AVX512=1 \
+    ORT_FORCE_SHARED_PROVIDER=1
+
+# Force consistent MKL floating-point behavior across different Intel generations
+# 12600K has different FPU precision defaults than 6th gen CPUs
+ENV MKL_ENABLE_INSTRUCTIONS=AVX2 \
+    MKL_DYNAMIC=FALSE
+
+# Prevent aggressive memory pre-allocation on newer CPUs
+ENV ORT_DISABLE_MEMORY_PATTERN_OPTIMIZATION=1
+
+# ============================================================================
+
 # Install Python packages with uv (combined in single layer for efficiency)
 # GPU builds: cupy, cuml, onnxruntime-gpu, voyager, torch (CUDA)
 # CPU builds: onnxruntime (CPU only), torch (CPU)
@@ -473,36 +507,8 @@ RUN chmod +x /app/docker-entrypoint.sh
 RUN ls -l /etc/supervisor/conf.d && test -f /etc/supervisor/conf.d/supervisord.conf
 
 # ============================================================================
-# CPU CONSISTENCY SETTINGS
+# ADDITIONAL CPU CONSISTENCY SETTINGS
 # ============================================================================
-# These environment variables ensure CONSISTENT behavior across different
-# AVX2-capable CPUs (e.g., Intel 6th gen vs 12th gen have different FPU defaults).
-# They do NOT enable non-AVX support - AVX2 is still required for x86_64 builds.
-# ARM64 builds use NEON instructions and work on all ARM64 CPUs.
-
-# oneDNN floating-point math mode: STRICT reduces non-deterministic FP optimizations
-# Keeps CPU behavior deterministic across different CPU generations
-ENV ONEDNN_DEFAULT_FPMATH_MODE=STRICT
-
-# ONNX Runtime optimization settings to prevent signal 9 crashes on newer CPUs
-# (Intel 12600K and similar have different optimization behavior than older CPUs)
-# Similar to TF_ENABLE_ONEDNN_OPTS=0 for TensorFlow compatibility
-ENV ORT_DISABLE_ALL_OPTIMIZATIONS=1 \
-    ORT_ENABLE_CPU_FP16_OPS=0
-
-# Force consistent memory allocation and precision behavior
-# Prevents different memory allocation patterns and floating-point precision issues
-# between Intel generations (e.g., 12600K vs i5-6500)
-ENV ORT_DISABLE_AVX512=1 \
-    ORT_FORCE_SHARED_PROVIDER=1
-
-# Force consistent MKL floating-point behavior across different Intel generations
-# 12600K has different FPU precision defaults than 6th gen CPUs
-ENV MKL_ENABLE_INSTRUCTIONS=AVX2 \
-    MKL_DYNAMIC=FALSE
-
-# Prevent aggressive memory pre-allocation on newer CPUs
-ENV ORT_DISABLE_MEMORY_PATTERN_OPTIMIZATION=1
 
 # numba JIT cache must land in a writable directory.
 # When the container runs as a non-root user the system site-packages directory
