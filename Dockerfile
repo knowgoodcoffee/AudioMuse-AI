@@ -261,6 +261,9 @@ RUN set -eux; \
 # stage and gets COPY'd in as already-built artifacts below.
 FROM runtime-base AS runner
 
+ENV ONEDNN_DEFAULT_FPMATH_MODE=STRICT
+ENV ORT_DISABLE_ALL_OPTIMIZATIONS=1
+ENV MKL_ENABLE_INSTRUCTIONS=AVX2
 ENV LANG=C.UTF-8 \
     PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
